@@ -3,7 +3,10 @@
 // The list of file replacements can be found in `angular.json`.
 
 export const environment = {
-  production: false
+  production: false,
+  apiTarget: 'http://localhost:7474/db/neo4j/tx/commit',
+  neo4jAccount: 'neo4j',
+  neo4jPassword: '1qaz@WSX'
 };
 
 /*

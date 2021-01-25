@@ -1,14 +1,18 @@
-import { Component, OnInit } from '@angular/core';
+import { Component, OnInit, AfterViewInit } from '@angular/core';
 import { FormBuilder, Validators } from '@angular/forms';
 import { HttpClient, HttpHeaders } from '@angular/common/http';
 import { environment } from 'src/environments/environment';
 import * as cytoscape from 'cytoscape';
 import { ElementDefinition } from 'cytoscape';
 import klay from 'cytoscape-klay';
-import { combineLatest, Observable } from 'rxjs';
-import { mergeMap } from 'rxjs/operators';
+import { combineLatest, forkJoin, Observable } from 'rxjs';
+import { map, mergeMap } from 'rxjs/operators';
+import { Neo4jService } from './services/neo4j.service';
 
-
+export interface SelectItem {
+  value: any;
+  text: any;
+}
 
 type NodeShape = 'rectangle' | 'roundrectangle' | 'ellipse' | 'triangle'
   | 'pentagon' | 'hexagon' | 'heptagon' | 'octagon' | 'star' | 'barrel'
@@ -22,242 +26,28 @@ type NodeShape = 'rectangle' | 'roundrectangle' | 'ellipse' | 'triangle'
   templateUrl: './app.component.html',
   styleUrls: ['./app.component.scss']
 })
-export class AppComponent implements OnInit {
+export class AppComponent implements OnInit, AfterViewInit {
   title = 'neo4jBreweries';
+
+  brewerySelectItemList: SelectItem[];
+  categorySelectItemList: SelectItem[];
+  citySelectItemList: SelectItem[];
+  countrySelectItemList: SelectItem[];
 
   /**
    * 表單資料
    */
   formData = this.formBuilder.group({
-    searchTarget: [null, Validators.required], // 查詢對象
-    relationType: ['count'], // 關係類型，筆數或層數
-    relationCount: [1, [Validators.min(1)]], // 關係數量
-    relationMen: [null], // 關係人
-    relationPowerItem: [], // 關係強弱
-    relationPowerCount1: [[20, 40]], // 持股比例
-    relationPowerCount2: [[0, 1000]], // 匯出入金額
-    relationPowerCount3: [[20, 40]], // 進銷貨比例
+    brewereId: [],
+    categoryId: [],
+    cityId: [],
+    countryId: [],
   });
-
-
-  // 測試資料，假設 neo4j 回傳的資料，僅有節點與關聯內容，節點的位置由前端繪圖時另外設定
-  data = {
-    results: [
-      {
-        columns: [
-          'p'
-        ],
-        data: [
-          {
-            row: [
-              [
-                {
-                  CUSTOMER_ID: 'C10004',
-                  PERSON_TYPE: '2'
-                },
-                {
-                  KEY_TO_PROD_02: '35'
-                },
-                {
-                  CUSTOMER_ID: 'C10001',
-                  PERSON_TYPE: '2'
-                },
-                {},
-                {
-                  CUSTOMER_ID: 'R10021',
-                  PERSON_TYPE: '1'
-                },
-                {},
-                {
-                  CUSTOMER_ID: 'R10042',
-                  PERSON_TYPE: '1'
-                },
-                {},
-                {
-                  CUSTOMER_ID: 'C10002',
-                  PERSON_TYPE: '2'
-                },
-                {},
-                {
-                  CUSTOMER_ID: 'R10044',
-                  PERSON_TYPE: '1'
-                }
-              ]
-            ],
-            meta: [
-              [
-                {
-                  id: 201,
-                  type: 'node',
-                  deleted: false
-                },
-                {
-                  id: 55,
-                  type: 'relationship',
-                  deleted: false
-                },
-                {
-                  id: 194,
-                  type: 'node',
-                  deleted: false
-                },
-                {
-                  id: 20,
-                  type: 'relationship',
-                  deleted: false
-                },
-                {
-                  id: 218,
-                  type: 'node',
-                  deleted: false
-                },
-                {
-                  id: 102,
-                  type: 'relationship',
-                  deleted: false
-                },
-                {
-                  id: 239,
-                  type: 'node',
-                  deleted: false
-                },
-                {
-                  id: 116,
-                  type: 'relationship',
-                  deleted: false
-                },
-                {
-                  id: 242,
-                  type: 'node',
-                  deleted: false
-                },
-                {
-                  id: 118,
-                  type: 'relationship',
-                  deleted: false
-                },
-                {
-                  id: 241,
-                  type: 'node',
-                  deleted: false
-                }
-              ]
-            ],
-            graph: {
-              nodes: [
-                {
-                  id: '241',
-                  labels: [
-                    'Customer'
-                  ],
-                  properties: {
-                    CUSTOMER_ID: 'R10044',
-                    PERSON_TYPE: '1'
-                  }
-                },
-                {
-                  id: '194',
-                  labels: [
-                    'Customer'
-                  ],
-                  properties: {
-                    CUSTOMER_ID: 'C10001',
-                    PERSON_TYPE: '2'
-                  }
-                },
-                {
-                  id: '242',
-                  labels: [
-                    'Customer'
-                  ],
-                  properties: {
-                    CUSTOMER_ID: 'C10002',
-                    PERSON_TYPE: '2'
-                  }
-                },
-                {
-                  id: '201',
-                  labels: [
-                    'Customer'
-                  ],
-                  properties: {
-                    CUSTOMER_ID: 'C10004',
-                    PERSON_TYPE: '2'
-                  }
-                },
-                {
-                  id: '218',
-                  labels: [
-                    'Customer'
-                  ],
-                  properties: {
-                    CUSTOMER_ID: 'R10021',
-                    PERSON_TYPE: '1'
-                  }
-                },
-                {
-                  id: '239',
-                  labels: [
-                    'Customer'
-                  ],
-                  properties: {
-                    CUSTOMER_ID: 'R10042',
-                    PERSON_TYPE: '1'
-                  }
-                }
-              ],
-              relationships: [
-                {
-                  id: '20',
-                  type: '雇傭',
-                  startNode: '194',
-                  endNode: '218',
-                  properties: {}
-                },
-                {
-                  id: '116',
-                  type: '雇傭',
-                  startNode: '242',
-                  endNode: '239',
-                  properties: {}
-                },
-                {
-                  id: '102',
-                  type: '家人',
-                  startNode: '239',
-                  endNode: '218',
-                  properties: {}
-                },
-                {
-                  id: '118',
-                  type: '雇傭',
-                  startNode: '242',
-                  endNode: '241',
-                  properties: {}
-                },
-                {
-                  id: '55',
-                  type: '合併',
-                  startNode: '201',
-                  endNode: '194',
-                  properties: {
-                    KEY_TO_PROD_02: '35'
-                  }
-                }
-              ]
-            }
-          }
-        ]
-      }
-    ],
-    errors: []
-  };
 
   cy: cytoscape.Core;
 
   layoutOptions = {
     name: 'klay',
-
     nodeDimensionsIncludeLabels: false, // Boolean which changes whether label dimensions are included when calculating node dimensions
     fit: true, // Whether to fit
     padding: 10, // Padding on fit
@@ -317,10 +107,10 @@ export class AppComponent implements OnInit {
 
   constructor(
     private formBuilder: FormBuilder,
-    private http: HttpClient) { }
+    private http: HttpClient,
+    private neo4jService: Neo4jService) { }
 
   ngOnInit(): void {
-
 
     cytoscape.use(klay);
 
@@ -368,17 +158,62 @@ export class AppComponent implements OnInit {
         },
       ],
     });
+  }
 
+  ngAfterViewInit(): void {
+    const $ = forkJoin([
+      this.neo4jService.getBreweryDropDownList().pipe(
+        map(item => {
+          return item.results[0].data.map(element => {
+            return {
+              text: element.graph.nodes[0].properties.name,
+              value: element.graph.nodes[0].id
+            };
+          });
+        })
+      ),
+      this.neo4jService.getCategoryDropDownList().pipe(
+        map(item => {
+          return item.results[0].data.map(element => {
+            return {
+              text: element.graph.nodes[0].properties.category,
+              value: element.graph.nodes[0].id
+            };
+          });
+        })
+      ),
+      this.neo4jService.getCityDropDownList().pipe(
+        map(item => {
+          return item.results[0].data.map(element => {
+            return {
+              text: element.graph.nodes[0].properties.city,
+              value: element.graph.nodes[0].id
+            };
+          });
+        })
+      ),
+      this.neo4jService.getCountryDorpDownList().pipe(
+        map(item => {
+          return item.results[0].data.map(element => {
+            return {
+              text: element.graph.nodes[0].properties.country,
+              value: element.graph.nodes[0].id
+            };
+          });
+        })
+      )
+    ]);
 
+    $.subscribe(([breweryItems, categoryItems, cityItems, countryItems]) => {
+      this.brewerySelectItemList = breweryItems;
+      this.categorySelectItemList = categoryItems;
+      this.citySelectItemList = cityItems;
+      this.countrySelectItemList = countryItems;
+    });
   }
 
   search(): void {
-
-
     console.log(this.formData.value);
-
-    const searchTargetId = this.formData.get('searchTarget').value;
-
     this.cy.nodes().remove();
     this.cy.edges().remove();
 
